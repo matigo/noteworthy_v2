@@ -1,0 +1,10 @@
+{
+    "lang_name": "Korean",
+    "lang_culture": "ko_KR",
+    "iso-639-1": "ko",
+    "iso-639-2": "kor",
+
+    "welcomeLine": "안녕하세요 {display_name}!",
+
+    "msgServerError": "A critical error has occurred. We're terribly sorry for this and are working on a fix."
+}

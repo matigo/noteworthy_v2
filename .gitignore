@@ -1,0 +1,14 @@
+# Specify filepatterns you want git to ignore.
+.DS_Store
+.htaccess
+*.token
+*.data
+*.inc
+*.log
+*.tmp
+*/staticmaps/*
+public/files/*
+cache/*
+tmp/*
+jason_fox_box.jpg
+config.php

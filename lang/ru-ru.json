@@ -1,0 +1,10 @@
+{
+    "lang_name": "Russian",
+    "lang_culture": "ru_RU",
+    "iso-639-1": "ru",
+    "iso-639-2": "rus",
+
+    "welcomeLine": "Привет {display_name}!",
+
+    "msgServerError": "A critical error has occurred. We're terribly sorry for this and are working on a fix."
+}

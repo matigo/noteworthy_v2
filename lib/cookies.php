@@ -142,10 +142,16 @@ class cookies {
         }
 
         /* Do we have a Token Key value? This is part of authentication validation, so override any key that might be in place */
+        if ( array_key_exists('validatetoken', $rVal) || array_key_exists('validate', $rVal) ) {
+            if ( mb_strlen(NoNull($rVal['validatetoken'], $rVal['validate'])) >= 40 ) {
+                $rVal['token'] = NoNull($rVal['validatetoken'], $rVal['validate']);
+            }
+            $rVal['PgRoot'] = 'validatetoken';
+        }
         if ( mb_strlen(NoNull($rVal['token_key'])) >= 40 ) { $rVal['token'] = $rVal['token_key']; }
 
         /* Get the Appropriate Account Data */
-        if ( mb_strlen(NoNull($rVal['token'])) >= 36 ) {
+        if ( mb_strlen(NoNull($rVal['token'])) >= 40 ) {
             require_once( LIB_DIR . '/auth.php' );
             $auth = new Auth( $rVal );
             $data = $auth->getTokenData(NoNull($rVal['token']));

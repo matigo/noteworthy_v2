@@ -108,6 +108,7 @@ class Midori {
      *  Uncaught Request Functions
      ** ********************************************************************** */
     private function _isUncaughtRequest( $code = 200 ) {
+        if  ( YNBool(DEBUG_ENABLED) === false ) { return false; }
         if ( $code > 0 && $code <= 290 ) { return false; }
         $ReqType = NoNull(strtolower($this->settings['ReqType']));
         if ( NoNull($ReqType, 'get') == 'get' ) { return false; }

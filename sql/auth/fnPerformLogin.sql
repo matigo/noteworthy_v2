@@ -17,7 +17,7 @@ CREATE OR REPLACE FUNCTION auth_local_login( "in_lookup" character varying, "in_
           FROM "Account" acct
          WHERE acct."is_deleted" = false and acct."type" NOT IN ('account.expired')
            and acct."password" = encode(sha512(CAST(CONCAT("sha_hash", "in_password") AS bytea)), 'hex')
-           and LOWER("in_lookup") IN (acct."login", acct."email")
+           and acct."login" = LOWER("in_lookup")
          ORDER BY acct."id" LIMIT 1;
 
         /* Create the Token Record */

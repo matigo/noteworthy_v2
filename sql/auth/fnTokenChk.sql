@@ -2,7 +2,6 @@ DROP FUNCTION token_chk;
 CREATE OR REPLACE FUNCTION token_chk( "in_token_id" integer, "in_token_guid" character varying, "in_lifespan" integer )
     RETURNS TABLE( "account_id"         integer,
                    "account_guid"       char(36),
-                   "persona_guid"       char(36),
                    "email"              varchar(160),
                    "type"               varchar(64),
 
@@ -54,11 +53,10 @@ CREATE OR REPLACE FUNCTION token_chk( "in_token_id" integer, "in_token_guid" cha
 
         /* Return the Token Data */
         RETURN QUERY
-        SELECT acct."id" as "account_id", acct."guid" as "account_guid", pa."guid" as "persona_guid",
-               acct."email", acct."type",
+        SELECT acct."id" as "account_id", acct."guid" as "account_guid", acct."email", acct."type",
                acct."display_name", acct."last_name", acct."first_name",
                ROUND(EXTRACT(EPOCH FROM acct."updated_at"))::integer as "version", acct."locale_code", acct."timezone",
-               COALESCE(pa."avatar_url", meta."avatar")::varchar(2048) as "avatar_url",
+               COALESCE(meta."avatar", '')::varchar(2048) as "avatar_url",
 
                meta."pref_fontfamily"::varchar(64) as "pref_fontfamily",
                meta."pref_fontsize"::varchar(64) as "pref_fontsize",
@@ -69,7 +67,6 @@ CREATE OR REPLACE FUNCTION token_chk( "in_token_id" integer, "in_token_guid" cha
 
                tt."id" as "token_id", tt."guid" as "token_guid", tt."created_at" as "login_at"
           FROM "Account" acct INNER JOIN "Tokens" tt ON acct."id" = tt."account_id"
-                              INNER JOIN "Persona" pa ON acct."id" = pa."account_id"
                          LEFT OUTER JOIN (SELECT tt."account_id",
                                                  MAX(CASE WHEN am."key" = 'profile.avatar' THEN am."value" ELSE NULL END) as "avatar",
                                                  MAX(CASE WHEN am."key" = 'preference.fontfamily' THEN am."value" ELSE NULL END) "pref_fontfamily",
@@ -81,9 +78,7 @@ CREATE OR REPLACE FUNCTION token_chk( "in_token_id" integer, "in_token_guid" cha
                                            WHERE tt."is_deleted" = false and tt."id" = COALESCE(xTokenID, 0)
                                            GROUP BY tt."account_id" LIMIT 1) meta ON tt."account_id" = meta."account_id"
          WHERE acct."is_deleted" = false and tt."is_deleted" = false
-           and pa."is_deleted" = false and pa."is_active" = true
            and tt."guid" = COALESCE(xTokenGuid, '') and tt."id" = COALESCE(xTokenID, 0)
-         ORDER BY CASE WHEN pa."is_default" = true THEN 0 ELSE 1 END, pa."created_at", pa."nickname"
          LIMIT 1;
 
          /* Update the Token Record's UpdatedAt stamp (This is done after the lookup on purpose) */

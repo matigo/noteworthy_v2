@@ -1,4 +1,4 @@
-INSERT INTO "UsageStats" ( "site_id", "token_id", "http_code", "request_type", "request_uri", "referrer",
+INSERT INTO "UsageStats" ( "token_id", "http_code", "request_type", "request_uri", "referrer",
                            "event_at", "event_on", "from_ip", "agent", "platform", "browser", "version",
                            "seconds", "sqlops", "message" )
 SELECT CASE WHEN [TOKEN_ID] > 0 THEN [TOKEN_ID] ELSE NULL END,

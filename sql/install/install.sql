@@ -564,7 +564,7 @@ CREATE OR REPLACE RULE rule_locale_before_delete AS
 DROP TABLE IF EXISTS "Account";
 CREATE TABLE IF NOT EXISTS "Account" (
     "id"            serial                          ,
-    "login"         varchar(64)  UNIQUE NOT NULL    ,
+    "login"         varchar(160) UNIQUE NOT NULL    ,
     "password"      varchar(192)        NOT NULL    DEFAULT '',
 
     "display_name"  varchar(120)        NOT NULL    DEFAULT '',
@@ -584,7 +584,7 @@ CREATE TABLE IF NOT EXISTS "Account" (
     PRIMARY KEY ("id"),
     FOREIGN KEY ("locale_code") REFERENCES "Locale" ("code")
 );
-CREATE INDEX idx_account_main ON "Account" ("login", "email");
+CREATE INDEX idx_account_main ON "Account" ("login");
 CREATE INDEX idx_account_guid ON "Account" ("guid");
 
 /* Before INSERT */

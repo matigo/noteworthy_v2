@@ -5,9 +5,8 @@ function doJSONQuery( endpoint, type, parameters, afterwards ) {
     if ( window.online === false ) { afterwards(false); }
     var access_token = getMetaValue('authorization');
     var api_url = getMetaValue('api_url');
-    if ( api_url == '' ) {
-        alert( "Error: API URL Not Defined!" );
-        return false;
+    if ( NoNull(api_url).length <= 10 ) {
+        api_url = location.protocol + '//' + location.hostname + '/api';
     }
     var xhr = new XMLHttpRequest();
 

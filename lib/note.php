@@ -26,12 +26,6 @@ class Note {
     public function performAction() {
         $ReqType = strtolower(NoNull($this->settings['ReqType'], 'GET'));
 
-        /* Check the Account Token is Valid */
-        if ( !$this->settings['_logged_in']) {
-            $this->_setMetaMessage("You need to sign in before using this API endpoint", 403);
-            return false;
-        }
-
         /* Perform the Action */
         switch ( $ReqType ) {
             case 'get':
@@ -52,9 +46,7 @@ class Note {
         }
 
         /* If we're here, there's nothing */
-        $ReqType = strtoupper($ReqType);
-        $this->_setMetaMessage("Unrecognized Request Type: $ReqType", 404);
-        return false;
+        return $this->_setMetaMessage("Unrecognized Request Type: " . strtoupper($ReqType), 404);
     }
 
     private function _performGetAction() {
@@ -71,35 +63,20 @@ class Note {
         }
 
         /* If we're here, there's nothing */
-        $this->_setMetaMessage("Nothing to do: [GET] $Activity", 404);
-        return false;
+        return $this->_setMetaMessage("Nothing to do: [GET] $Activity", 404);
     }
 
     private function _performPostAction() {
         $Activity = strtolower(NoNull($this->settings['PgSub2'], $this->settings['PgSub1']));
         if ( mb_strlen($Activity) == 36 ) { $Activity = 'set'; }
 
+        /* Check the Account Token is Valid */
+        if ( !$this->settings['_logged_in']) { return $this->_setMetaMessage("You need to sign in before using this API endpoint", 403); }
+
         switch ( $Activity ) {
             case 'write':
             case 'set':
-
-
-            default:
-                /* Do Nothing */
-        }
-
-        /* If we're here, there's nothing */
-        $this->_setMetaMessage("Nothing to do: [POST] $Activity", 404);
-        return false;
-    }
-
-    private function _performDeleteAction() {
-        $Activity = strtolower(NoNull($this->settings['PgSub2'], $this->settings['PgSub1']));
-        if ( mb_strlen($Activity) == 36 ) { $Activity = 'scrub'; }
-
-        switch ( $Activity ) {
-            case '':
-                $rVal = array( 'activity' => "[DELETE] /session/$Activity" );
+                return $this->_setNoteData();
                 break;
 
             default:
@@ -107,8 +84,27 @@ class Note {
         }
 
         /* If we're here, there's nothing */
-        $this->_setMetaMessage("Nothing to do: [DELETE] $Activity", 404);
-        return false;
+        return $this->_setMetaMessage("Nothing to do: [POST] $Activity", 404);
+    }
+
+    private function _performDeleteAction() {
+        $Activity = strtolower(NoNull($this->settings['PgSub2'], $this->settings['PgSub1']));
+        if ( mb_strlen($Activity) == 36 ) { $Activity = 'scrub'; }
+
+        /* Check the Account Token is Valid */
+        if ( !$this->settings['_logged_in']) { return $this->_setMetaMessage("You need to sign in before using this API endpoint", 403); }
+
+        switch ( $Activity ) {
+            case '':
+                return array( 'activity' => "[DELETE] /session/$Activity" );
+                break;
+
+            default:
+                /* Do Nothing */
+        }
+
+        /* If we're here, there's nothing */
+        return $this->_setMetaMessage("Nothing to do: [DELETE] $Activity", 404);
     }
 
     /**
@@ -138,6 +134,58 @@ class Note {
     public function getNoteDetails( $note_id, $version = 0 ) { return $this->_getNoteById($note_id, $version); }
 
     /** ********************************************************************* *
+     *  Data Reading Functions
+     ** ********************************************************************* */
+    /**
+     *  Function reads the input values and returns a standardized array
+     */
+    private function _getInputValues() {
+        $TextKeys = array( 'content_text', 'content', 'note_text', 'note', 'text', 'value' );
+        $CleanText = '';
+        foreach ( $TextKeys as $Key ) {
+            if ( mb_strlen($CleanText) <= 0 && array_key_exists($Key, $this->settings) ) { $CleanText = NoNull($this->settings[$Key]); }
+        }
+
+        $CleanGuid = NoNull($this->settings['note_guid'], $this->settings['guid']);
+        $CleanType = NoNull($this->settings['note_type'], $this->settings['type']);
+
+        $CleanDate = NoNull($this->settings['note_date'], $this->settings['date']);
+        if ( mb_strlen($CleanDate) > 10 ) { if ( validateDate($CleanDate, 'Y-m-d H:i:s') !== true ) { $CleanDate = ''; } }
+        if ( mb_strlen($CleanDate) == 10 ) { if ( validateDate($CleanDate) !== true ) { $CleanDate = ''; } }
+
+        /* Do we have tags to parse? */
+        $CleanTags = '';
+        $TagList = NoNull($this->settings['note_tags'], $this->settings['tags']);
+        if ( mb_strlen($TagList) > 0 ) {
+            $TagList = str_replace(array(','), '|', "$TagList|");
+            $tags = explode('|');
+            $vv = array();
+
+            foreach ( $tags as $tag ) {
+                $tag = NoNull($tag);
+                $tt = strtolower($tag);
+                if ( mb_strlen($tt) > 0 && in_array($tt, $vv) === false ) { $vv[] = $tag; }
+            }
+
+            /* If we have tags, let's set the value */
+            if ( is_array($vv) && count($vv) > 0 ) { $CleanTags = implode('|', $vv); }
+        }
+
+        /* Get the Boolean Options */
+        $mdown = NoNull($this->settings['as_markdown'], $this->settings['markdown']);
+
+        /* Build the output array */
+        return array( 'text' => NoNull($CleanText),
+                      'guid' => ((mb_strlen($CleanGuid) == 36) ? $CleanGuid : ''),
+                      'type' => ((mb_strlen($CleanType) > 0) ? $CleanType : ''),
+                      'date' => ((mb_strlen($CleanDate) >= 10) ? $CleanDate : ''),
+                      'tags' => NoNull($CleanTags),
+
+                      'markdown' => YNBool($mdown),
+                     );
+    }
+
+    /** ********************************************************************* *
      *  Reading Functions
      ** ********************************************************************* */
     /**
@@ -147,10 +195,7 @@ class Note {
         $CleanGuid = NoNull($this->settings['note_guid'], NoNull($this->settings['note'], $this->settings['guid']));
 
         /* Perform some basic validation */
-        if ( mb_strlen($CleanGuid) > 0 && mb_strlen($CleanGuid) != 36 ) {
-            $this->_setMetaMessage("Invalid Note.guid Provided", 400);
-            return false;
-        }
+        if ( mb_strlen($CleanGuid) != 36 ) { return $this->_setMetaMessage("Invalid Note Identifier Provided", 400); }
 
         /* Collect the Library */
         $ReplStr = array( '[ACCOUNT_ID]' => nullInt($this->settings['_account_id']),
@@ -159,98 +204,21 @@ class Note {
         $sqlStr = readResource(SQL_DIR . '/note/getNoteByGuid.sql', $ReplStr);
         $rslt = doSQLQuery($sqlStr);
         if ( is_array($rslt) ) {
-            $data = array();
-
             foreach ( $rslt as $Row ) {
+                if ( YNBool($Row['can_access']) ) {
+                    $data = $this->_getNoteById($Row['note_id'], $Row['note_version']);
 
-                /* Only show the Session if it meets the visibility criteria */
-                if ( YNBool($Row['is_visible']) ) {
+                    /* If we have data, let's return it */
+                    if ( is_array($data) && count($data) ) { return $data; }
 
-                    $meta = false;
-                    if ( YNBool($Row['has_meta']) ) {
-                        $meta = $this->_getNoteMetaData($Row['note_id'], $Row['version']);
-                    }
-
-                    $note = false;
-                    if ( nullInt($Row['note_id']) > 0 ) {
-                        /* If the Markdown Parser hasn't been loaded yet, do so */
-                        if ( $this->parser === false ) { $this->parser = new MarkdownExtra; }
-
-                        $note = array( 'guid'   => NoNull($Row['note_guid']),
-                                       'type'   => NoNull($Row['note_type']),
-                                       'content' => array( 'text' => $this->_getPlainText($Row['note_text']),
-                                                           'html' => $this->parser->defaultTransform($Row['note_text']),
-                                                          ),
-                                       'hash'   => NoNull($Row['note_hash']),
-                                       'created_at'   => apiDate($Row['note_createdat'], 'Z'),
-                                       'created_unix' => apiDate($Row['note_createdat'], 'U'),
-                                       'updated_at'   => apiDate($Row['note_updatedat'], 'Z'),
-                                       'updated_unix' => apiDate($Row['note_updatedat'], 'U'),
-                                       'updated_by'   => $acct->getAccountDetails($Row['note_updatedby'], $Row['note_updatedby_version']),
-                                      );
-                    }
-
-                    /* Assemble the Material record */
-                    $record = array( 'guid'     => NoNull($Row['session_guid']),
-                                     'type'     => NoNull($Row['type']),
-                                     'week'     => nullInt($Row['session_week']),
-
-                                     'start_at'     => apiDate($Row['start_at'], 'Z'),
-                                     'start_unix'   => apiDate($Row['start_at'], 'U'),
-                                     'until_at'     => apiDate($Row['until_at'], 'Z'),
-                                     'until_unix'   => apiDate($Row['until_at'], 'U'),
-
-                                     'goal'     => NoNull($Row['goal']),
-                                     'legacy_id'    => NoNull($Row['legacy_id']),
-
-                                     'is_locked'    => YNBool($Row['is_locked']),
-
-                                     'title'    => NoNull($Row['title']),
-                                     'description' => NoNull($Row['description']),
-                                     'language' => $locale,
-                                     'level'    => $level,
-
-                                     'is_active'    => YNBool($Row['is_active']),
-                                     'resource_url' => $cdnUrl . '/materials/' . NoNull(mb_substr('000000' . nullInt($Row['material_id']), -6)) . '/',
-
-                                     'modules'  => $modules,
-                                     'course'   => $course,
-                                     'units'    => $units,
-                                     'meta'     => $meta,
-
-
-                                     'created_at'   => apiDate($Row['created_at'], 'Z'),
-                                     'created_unix' => apiDate($Row['created_at'], 'U'),
-                                     'updated_at'   => apiDate($Row['updated_at'], 'Z'),
-                                     'updated_unix' => apiDate($Row['updated_at'], 'U'),
-                                     'updated_by'   => $acct->getAccountDetails($Row['updated_by'], $Row['updatedby_version']),
-                                    );
-
-                    /* Ensure the record is cleaned up a bit */
-                    if ( is_bool($record['start_at']) ) {
-                        unset($record['start_unix']);
-                        unset($record['start_at']);
-                    }
-                    if ( is_bool($record['until_at']) ) {
-                        unset($record['until_unix']);
-                        unset($record['until_at']);
-                    }
-                    if ( is_bool($record['language']) ) { unset($record['language']); }
-                    if ( is_bool($record['level']) ) { unset($record['level']); }
-
-                    /* Add the record to the output */
-                    $data[] = $record;
+                } else {
+                    return $this->_setMetaMessage("You do not have permission to access this note", 403);
                 }
             }
-            unset($acct);
-
-            /* If we have data, let's return it */
-            if ( is_array($data) && count($data) ) { return $data; }
         }
 
-        /* If we're here, then there are no locations to return (which would be odd) */
-        $this->_setMetaMessage("There are no locations available for your account", 404);
-        return false;
+        /* If we're here, then no note could be found */
+        return $this->_setMetaMessage("Could not find requested Note", 404);
     }
 
     /**
@@ -299,46 +267,9 @@ class Note {
     /**
      *  Function creates or updates a Note record and returns an updated Note object
      */
-    private function _setNote() {
-        $validTypes = array('note.article', 'note.bookmark', 'note.location', 'note.social', 'note.quotation');
-        $content = NoNull($this->settings['post_content'], NoNull($this->settings['note_content'], $this->settings['content']));
-        $title = NoNull($this->settings['post_title'], NoNull($this->settings['note_title'], $this->settings['title']));
-        $type = NoNull($this->settings['post_type'], NoNull($this->settings['note_type'], $this->settings['type']));
+    private function _setNoteData() {
 
-        $published = YNBool(NoNull($this->settings['is_published'], $this->settings['published']));
-        $private = YNBool(NoNull($this->settings['is_private'], $this->settings['private']));
-        $hidden = YNBool(NoNull($this->settings['is_hidden'], $this->settings['hidden']));
 
-        /* Perform some basic validation */
-        if ( in_array($type, $validTypes) === false ) { $type = 'note.normal'; }
-        if ( is_array($meta) === false ) { $meta = false; }
-
-        /* Prep the Write */
-        $ReplStr = array( '[ACCOUNT_ID]' => nullInt($this->settings['_account_id']),
-                          '[PERSONA_GUID]' => sqlScrub($personaGuid),
-                          '[SITE_GUID]'  => sqlScrub($siteGuid)
-                          '[CONTENT]'    => sqlScrub($content),
-                          '[PRIVATE]'    => BoolYN($private),
-                          '[NOTE_ID]'    => nullInt($note_id),
-                          '[TYPE]'       => sqlScrub($type),
-                         );
-        $sqlStr = readResource(SQL_DIR . '/note/setNoteRecord.sql', $ReplStr);
-        $rslt = doSQLQuery($sqlStr);
-        if ( is_array($rslt) ) {
-            foreach ( $rslt as $Row ) {
-                $note_id = nullInt($Row['note_id']);
-
-                /* Write the meta data if we have any */
-                if ( is_array($meta) && count($meta) > 0 ) { $sOK = $this->_setMetaRecords($note_id, $meta); }
-
-                /* Return an updated Note Object */
-                return $this->_getNoteById($Row['note_id'], $Row['note_version']);
-            }
-        }
-
-        /* If we're here, we could not write the note */
-        $this->_setMetaMessage("Could not write Note", 400);
-        return false;
     }
 
     /**
@@ -388,6 +319,23 @@ class Note {
     }
 
     /** ********************************************************************* *
+     *  Delete Functions
+     ** ********************************************************************* */
+    /**
+     *  Function marks a Note record as deleted and returns a basic confirmation array
+     */
+    private function _deleteNote() {
+
+    }
+
+    /**
+     *  Function marks a Tag on a Note as deleted
+     */
+    private function _deleteNoteTag() {
+
+    }
+
+    /** ********************************************************************* *
      *  Interntal Functions
      ** ********************************************************************* */
     /**
@@ -400,9 +348,8 @@ class Note {
         /* Perform a basic error check */
         if ( $note_id <= 0 ) { return false; }
 
-        $CachePrefix = 'note-' . paddNumber($note_id, 8);
+        $CachePrefix = 'note-' . paddNumber($note_id, 8) . '.' . paddNumber($this->settings['_account_id'], 8);
         $data = false;
-        $uid = 0;
 
         /* Is there a "proper" version number for this Post? */
         $propVer = false;
@@ -429,33 +376,34 @@ class Note {
                 $acct = new Account($this->settings, $this->strings);
 
                 foreach ( $rslt as $Row ) {
-                    if ( nullInt($Row['version']) > $version ) { $version = nullInt($Row['version']); }
-                    $uid = nullInt($Row['updated_by']);
+                    if ( YNBool($Row['can_access']) ) {
+                        if ( nullInt($Row['version']) > $version ) { $version = nullInt($Row['version']); }
 
-                    $meta = false;
-                    if ( YNBool($Row['has_meta']) ) {
-                        $meta = $this->_getNoteMetaData($Row['note_id'], $Row['version']);
+                        $meta = false;
+                        if ( YNBool($Row['has_meta']) ) {
+                            $meta = $this->_getNoteMetaData($Row['note_id'], $Row['version']);
+                        }
+
+                        /* Construct the output array */
+                        $data = array( 'guid'    => NoNull($Row['note_guid']),
+                                       'type'    => NoNull($Row['note_type']),
+                                       'content' => array( 'text' => $this->_getPlainText($Row['note_text']),
+                                                           'html' => $this->_getMarkdownHTML($Row['note_text']),
+                                                          ),
+
+                                       'hash'    => NoNull($Row['note_hash']),
+                                       'meta'    => $meta,
+
+                                       'has_history'    => YNBool($Row['has_history']),
+                                       'is_private'     => YNBool($Row['is_private']),
+
+                                       'created_at'     => apiDate($Row['created_at'], 'Z'),
+                                       'created_unix'   => apiDate($Row['created_at'], 'U'),
+                                       'updated_at'     => apiDate($Row['updated_at'], 'Z'),
+                                       'updated_unix'   => apiDate($Row['updated_at'], 'U'),
+                                       'updated_by'     => $acct->getAccountDetails($Row['updated_by'], $Row['updated_by_version']),
+                                      );
                     }
-
-                    /* Construct the output array */
-                    $data = array( 'guid'    => NoNull($Row['note_guid']),
-                                   'type'    => NoNull($Row['note_type']),
-                                   'content' => array( 'text' => $this->_getPlainText($Row['note_text']),
-                                                       'html' => $this->_getMarkdownHTML($Row['note_text']),
-                                                      ),
-
-                                   'hash'    => NoNull($Row['note_hash']),
-                                   'meta'    => $meta,
-
-                                   'has_history'    => YNBool($Row['has_history']),
-                                   'is_private'     => YNBool($Row['is_private']),
-
-                                   'created_at'     => apiDate($Row['created_at'], 'Z'),
-                                   'created_unix'   => apiDate($Row['created_at'], 'U'),
-                                   'updated_at'     => apiDate($Row['updated_at'], 'Z'),
-                                   'updated_unix'   => apiDate($Row['updated_at'], 'U'),
-                                   'updated_by'     => $acct->getAccountDetails($Row['updated_by'], $Row['updated_by_version']),
-                                  );
                 }
                 unset($acct);
             }
@@ -468,11 +416,6 @@ class Note {
 
             /* Set the Post version for future queries of the same object (if required) */
             setGlobalObject($CachePrefix, nullInt($version));
-        }
-
-        /* Check if the Note is visible to the requesting account */
-        if ( YNBool($data['is_private']) ) {
-            if ( in_array($this->settings['_account_type'], array('account.global', 'account.admin')) === false && $uid != $this->settings['_account_id'] ) { $data = false; }
         }
 
         /* If we have valid data, return it. Otherwise, unhappy boolean. */

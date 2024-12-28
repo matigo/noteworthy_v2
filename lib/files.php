@@ -712,7 +712,7 @@ class Files {
                                    'icon'   => $this->_getMimeTypeIcon($Row['mimetype']),
                                    'bytes'  => nullInt($Row['bytes']),
 
-                                   'owner'  => $acct->getAccountDetails($Row['account_id'], $Row['account_version']),
+                                   'owner'  => $acct->getAccountData($Row['account_id'], $Row['account_version']),
                                    'meta'   => $meta,
 
                                    'original' => $url,

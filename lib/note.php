@@ -11,13 +11,13 @@ class Note {
     var $settings;
     var $strings;
     var $parser;
-    var $cache;
+    var $acct;
 
     function __construct( $settings, $strings = false ) {
         $this->settings = $settings;
         $this->strings = ((is_array($strings)) ? $strings : getLangDefaults($this->settings['_language_code']));
         $this->parser = false;
-        $this->cache = array();
+        $this->acct = false;
     }
 
     /** ********************************************************************* *
@@ -207,9 +207,10 @@ class Note {
      *  Function returns a Note based on the Guid provided
      */
     private function _getNoteByGuid() {
-        $CleanGuid = NoNull($this->settings['note_guid'], NoNull($this->settings['note'], $this->settings['guid']));
+        $inputs = $this->_getInputValues();
 
         /* Perform some basic validation */
+        $CleanGuid = NoNull($inputs['guid']);
         if ( mb_strlen($CleanGuid) != 36 ) { return $this->_setMetaMessage("Invalid Note Identifier Provided", 400); }
 
         /* Collect the Library */
@@ -234,46 +235,6 @@ class Note {
 
         /* If we're here, then no note could be found */
         return $this->_setMetaMessage("Could not find requested Note", 404);
-    }
-
-    /**
-     *  Function collects and returns the meta data for a given Note in an array or an unhappy boolean
-     */
-    private function _getNoteMetaData( $note_id, $version ) {
-        $note_id = nullInt($note_id);
-        $version = nullInt($version);
-
-        /* Perform some basic validation */
-        if ( $note_id <= 0 ) { return false; }
-
-        /* Check to see if the meta data is already cached */
-        $CacheKey = 'note-' . substr('00000000' . $note_id, -8) . '-meta-' . $version;
-        $data = getCacheObject($CacheKey);
-
-        /* If we do not have any applicable data, then collect it */
-        if ( is_array($data) === false ) {
-            $ReplStr = array( '[NOTE_ID]' => nullInt($note_id) );
-            $sqlStr = readResource(SQL_DIR . '/note/getNoteMetaData.sql', $ReplStr);
-            $rslt = doSQLQuery($sqlStr);
-            if ( is_array($rslt) ) {
-                if ( count($rslt) > 0 ) {
-                    foreach ( $rslt as $Row ) {
-                        if ( nullInt($Row['version']) > $version ) { $version = nullInt($Row['version']); }
-                    }
-                    $data = buildMetaArray($rslt);
-                }
-            }
-
-            /* If we have some data, let's save it */
-            if ( is_array($data) && count($data) > 0 ) {
-                $CacheKey = 'note-' . substr('00000000' . $note_id, -8) . '-meta-' . $version;
-                setCacheObject($CacheKey, $data);
-            }
-        }
-
-        /* If we have data, return it. Otherwise, unhappy boolean */
-        if ( is_array($data) && count($data) > 0 ) { return $data; }
-        return false;
     }
 
     /** ********************************************************************* *
@@ -434,40 +395,62 @@ class Note {
             $sqlStr = readResource(SQL_DIR . '/note/getNoteById.sql', $ReplStr);
             $rslt = doSQLQuery($sqlStr);
             if ( is_array($rslt) ) {
-                require_once(LIB_DIR . '/account.php');
-                $acct = new Account($this->settings, $this->strings);
+                if ( is_bool($this->acct) ) {
+                    require_once(LIB_DIR . '/account.php');
+                    $this->acct = new Account($this->settings, $this->strings);
+                }
 
                 foreach ( $rslt as $Row ) {
                     if ( YNBool($Row['can_access']) ) {
-                        if ( nullInt($Row['version']) > $version ) { $version = nullInt($Row['version']); }
-
+                        $parent = false;
+                        $thread = false;
                         $meta = false;
-                        if ( YNBool($Row['has_meta']) ) {
-                            $meta = $this->_getNoteMetaData($Row['note_id'], $Row['version']);
+                        $tags = false;
+
+                        if ( nullInt($Row['version']) > $version ) { $version = nullInt($Row['version']); }
+                        if ( YNBool($Row['has_meta']) ) { $meta = $this->_getNoteMetaData($Row['note_id']); }
+                        if ( YNBool($Row['has_tags']) ) { $tags = $this->_getNoteTags($Row['note_id']); }
+
+                        if ( nullInt($Row['thread_id']) > 0 ) {
+                            $thread = array( 'guid'    => NoNull($Row['thread_guid']),
+                                             'hash'    => NoNull($Row['thread_hash']),
+                                             'version' => nullInt($Row['thread_version']),
+                                            );
+                        }
+
+                        if ( nullInt($Row['parent_id']) > 0 ) {
+                            $parent = array( 'guid'    => NoNull($Row['parent_guid']),
+                                             'hash'    => NoNull($Row['parent_hash']),
+                                             'version' => nullInt($Row['parent_version']),
+                                            );
                         }
 
                         /* Construct the output array */
-                        $data = array( 'guid'    => NoNull($Row['note_guid']),
-                                       'type'    => NoNull($Row['note_type']),
-                                       'content' => array( 'text' => $this->_getPlainText($Row['note_text']),
-                                                           'html' => $this->_getMarkdownHTML($Row['note_text']),
+                        $data = array( 'guid'    => NoNull($Row['guid']),
+                                       'type'    => NoNull($Row['type']),
+
+                                       'title'   => NoNull($Row['title']),
+                                       'content' => array( 'text' => $this->_getPlainText($Row['content']),
+                                                           'html' => $this->_getMarkdownHTML($Row['content']),
                                                           ),
 
-                                       'hash'    => NoNull($Row['note_hash']),
+                                       'hash'    => NoNull($Row['hash']),
                                        'meta'    => $meta,
+                                       'tags'    => $tags,
 
+                                       'owner'          => $this->acct->getAccountData($Row['account_id'], $Row['account_version']),
+                                       'thread'         => $thread,
+                                       'parent'         => $parent,
                                        'has_history'    => YNBool($Row['has_history']),
-                                       'is_private'     => YNBool($Row['is_private']),
 
                                        'created_at'     => apiDate($Row['created_at'], 'Z'),
                                        'created_unix'   => apiDate($Row['created_at'], 'U'),
                                        'updated_at'     => apiDate($Row['updated_at'], 'Z'),
                                        'updated_unix'   => apiDate($Row['updated_at'], 'U'),
-                                       'updated_by'     => $acct->getAccountDetails($Row['updated_by'], $Row['updated_by_version']),
+                                       'updated_by'     => $this->acct->getAccountData($Row['updated_by'], $Row['updated_by_version']),
                                       );
                     }
                 }
-                unset($acct);
             }
 
             /* Ensure the Cache Key is set to the proper Post version */
@@ -482,6 +465,62 @@ class Note {
 
         /* If we have valid data, return it. Otherwise, unhappy boolean. */
         if ( is_array($data) && mb_strlen(NoNull($data['guid'])) == 36 ) { return $data; }
+        return false;
+    }
+
+    /**
+     *  Function collects and returns the meta data for a given Note in an array or an unhappy boolean
+     *
+     *  Note: caching is not used here becuase the Note object itself is cached
+     */
+    private function _getNoteMetaData( $note_id ) {
+        $note_id = nullInt($note_id);
+        if ( $note_id <= 0 ) { return false; }
+
+        /* Let's collect the data */
+        $ReplStr = array( '[NOTE_ID]' => nullInt($note_id) );
+        $sqlStr = readResource(SQL_DIR . '/note/getNoteMetaData.sql', $ReplStr);
+        $rslt = doSQLQuery($sqlStr);
+        if ( is_array($rslt) ) {
+            $data = buildMetaArray($rslt);
+
+            /* If we have data, let's return it */
+            if ( is_array($data) && count($data) > 0 ) { return $data; }
+        }
+
+        /* If we're here, there is nothing */
+        return false;
+    }
+
+    /**
+     *  Function collects the tags that are associated with a Note and returns an array or an unhappy boolean
+     *
+     *  Note: caching is not used here becuase the Note object itself is cached
+     */
+    private function _getNoteTags( $note_id ) {
+        $note_id = nullInt($note_id);
+        if ( $note_id <= 0 ) { return false; }
+
+        /* Let's collect the data */
+        $ReplStr = array( '[NOTE_ID]' => nullInt($note_id) );
+        $sqlStr = readResource(SQL_DIR . '/note/getNoteTags.sql', $ReplStr);
+        $rslt = doSQLQuery($sqlStr);
+        if ( is_array($rslt) ) {
+            $data = array();
+
+            foreach ( $rslt as $Row ) {
+                $data[] = array( 'key'     => NoNull($Row['key']),
+                                 'name'    => NoNull($Row['name']),
+                                 'summary' => ((mb_strlen(NoNull($Row['summary'])) > 0) ? NoNull($Row['summary']) : false),
+                                 'guid'    => NoNull($Row['guid']),
+                                );
+            }
+
+            /* If we have data, let's return it */
+            if ( is_array($data) && count($data) > 0 ) { return $data; }
+        }
+
+        /* If we're here, there is nothing */
         return false;
     }
 

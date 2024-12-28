@@ -165,7 +165,7 @@ class Account {
         $data = $this->_getPreference($Key);
         return $data['value'];
     }
-    public function getAccountDetails( $AccountId = 0, $version = 0 ) { return $this->_getAccountDetails( $AccountId, $version ); }
+    public function getAccountData( $account_id = 0, $version = 0 ) { return $this->_getAccountData( $account_id, $version ); }
 
     /** ********************************************************************* *
      *  Private Functions
@@ -200,45 +200,6 @@ class Account {
                       'locale'     => validateLanguage(NoNull($this->settings['locale_code'], $this->settings['locale'])),
                       'timezone'   => NoNull($this->settings['time_zone'], $this->settings['timezone']),
                      );
-    }
-
-    /** ********************************************************************* *
-     *  Nickname Management
-     ** ********************************************************************* */
-    /**
-     *  Function checks to see if a nickname is available for use and returns a simple JSON object
-     */
-    private function _checkNickAvailable() {
-        $data = $this->_collectValues();
-
-        $nick = NoNull($data['nickname']);
-        if ( mb_strlen($nick) > 20 ) { return $this->_setMetaMessage("Nickname [$nick] is too long", 400); }
-        if ( mb_strlen($nick) < 3 ) { return $this->_setMetaMessage("Nickname [$nick] is too short", 400); }
-
-        /* Return the results */
-        return array( 'nickname'     => $nick,
-                      'is_available' => $this->_isNickAvailable($nick),
-                     );
-    }
-
-    /**
-     *  Function confirms the requested nickname is available and returns a boolean response
-     */
-    private function _isNickAvailable( $nickname ) {
-        $nickname = strtolower(NoNull(preg_replace("/[^a-zA-Z0-9]+/", '', $nickname)));
-        if ( mb_strlen($nickname) >= 3 && mb_strlen($nickname) <= 20 ) {
-            $ReplStr = array( '[NICKNAME]' => sqlScrub($nickname) );
-            $sqlStr = readResource(SQL_DIR . '/account/isNickAvailable.sql', $ReplStr);
-            $rslt = doSQLQuery($sqlStr);
-            if ( is_array($rslt) ) {
-                foreach ( $rslt as $Row ) {
-                    if ( nullInt($Row['records']) == 0 ) { return true; }
-                }
-            }
-        }
-
-        /* If we're here, the nickname is not available */
-        return false;
     }
 
     /** ********************************************************************* *
@@ -309,7 +270,7 @@ class Account {
         if ( is_array($rslt) ) {
             foreach ( $rslt as $Row ) {
                 if ( mb_strlen(NoNull($Row['account_guid'])) == 36 ) {
-                    $data = $this->_getAccountDetails($Row['account_id'], $Row['person_version']);
+                    $data = $this->_getAccountData($Row['account_id'], $Row['person_version']);
                 }
             }
         }
@@ -385,7 +346,7 @@ class Account {
         if ( is_array($rslt) ) {
             foreach ( $rslt as $Row ) {
                 if ( mb_strlen(NoNull($Row['account_guid'])) == 36 ) {
-                    $data = $this->_getAccountDetails($Row['account_id'], $Row['person_version']);
+                    $data = $this->_getAccountData($Row['account_id'], $Row['person_version']);
                 }
             }
         }
@@ -397,18 +358,18 @@ class Account {
     /**
      *  This function is similar to getProfile, but uses an Account.id and will return *generic* account data that can be cached for faster access
      */
-    private function _getAccountDetails( $id, $ver = 0 ) {
+    private function _getAccountData( $account_id, $ver = 0 ) {
         if ( !defined('DEFAULT_LANG') ) { define('DEFAULT_LANG', 'en_US'); }
         if ( !defined('TIMEZONE') ) { define('TIMEZONE', 'UTC'); }
 
-        $AccountId = nullInt($id);
+        $account_id = nullInt($account_id);
         $version = nullInt($ver);
 
         /* Perform some basic validation */
-        if ( $AccountId <= 0 ) { return false; }
+        if ( $account_id <= 0 ) { return false; }
 
         /* Determine the Correct Cache Key (if the version is zero, check to see if we've already done a lookup in this HTTP request) */
-        $CacheKey = 'account-' . substr('00000000' . $AccountId, -8) . '-' . $version;
+        $CacheKey = 'account-' . substr('00000000' . $account_id, -8) . '-' . $version;
         if ( $version <= 0 ) {
             $propKey = getGlobalObject('prop-' . $CacheKey);
             if ( is_bool($propKey) === false && NoNull($propKey) != '' ) { $CacheKey = $propKey; }
@@ -419,8 +380,8 @@ class Account {
 
         /* If we do not have this record in the cache, query it from the database */
         if ( is_array($data) === false ) {
-            $ReplStr = array( '[ACCOUNT_ID]' => nullInt($AccountId) );
-            $sqlStr = readResource(SQL_DIR . '/account/getAccountDetails.sql', $ReplStr);
+            $ReplStr = array( '[ACCOUNT_ID]' => nullInt($account_id) );
+            $sqlStr = readResource(SQL_DIR . '/account/getAccountData.sql', $ReplStr);
             $rslt = doSQLQuery($sqlStr);
             if ( is_array($rslt) ) {
                 $propKey = '';
@@ -432,45 +393,28 @@ class Account {
 
                     /* If we have either Account or Person meta records, collect them */
                     $meta = false;
-                    if ( YNBool($Row['has_meta']) ) {
-                        $meta = $this->_getAccountMeta($Row['account_id'], $Row['version']);
-                    }
+                    if ( YNBool($Row['has_meta']) ) { $meta = $this->_getAccountMeta($Row['account_id']); }
 
-                    $data = array( 'id'          => nullInt($Row['account_id']),
-                                   'guid'        => NoNull($Row['account_guid']),
-                                   'type'        => NoNull($Row['account_type']),
-                                   'nickname'    => NoNull($Row['nickname']),
+                    $data = array( 'id'          => nullInt($Row['id']),
+                                   'guid'        => NoNull($Row['guid']),
+                                   'type'        => NoNull($Row['type']),
                                    'avatar_url'  => NoNull($this->settings['HomeURL']) . '/avatars/' . NoNull($meta['profile']['avatar'], 'default.png'),
 
                                    'display_name' => NoNull($Row['display_name']),
-                                   'email'        => NoNull($Row['email']),
-
                                    'last_name'   => NoNull($Row['last_name']),
                                    'first_name'  => NoNull($Row['first_name']),
-                                   'print_name'  => NoNull($Row['print_name']),
-                                   'last_alt'    => NoNull($Row['last_alt']),
-                                   'first_alt'   => NoNull($Row['first_alt']),
-                                   'print_alt'   => NoNull($Row['print_alt']),
-
-                                   'profile'     => false,
+                                   'email'        => NoNull($Row['email']),
 
                                    'locale'      => NoNull($Row['locale_code'], DEFAULT_LANG),
                                    'timezone'    => NoNull($Row['timezone'], TIMEZONE),
 
-                                   'is_admin'    => YNBool($Row['is_admin']),
                                    'is_you'      => false,
 
-                                   'created_at'   => apiDate($Row['account_createdat'], 'Z'),
-                                   'created_unix' => apiDate($Row['account_createdat'], 'U'),
-                                   'updated_at'   => apiDate($Row['updated_at'], 'Z'),
-                                   'updated_unix' => apiDate($Row['updated_at'], 'U'),
+                                   'created_at'   => apiDate($Row['created_unix'], 'Z'),
+                                   'created_unix' => apiDate($Row['created_unix'], 'U'),
+                                   'updated_at'   => apiDate($Row['updated_unix'], 'Z'),
+                                   'updated_unix' => apiDate($Row['updated_unix'], 'U'),
                                   );
-
-                    /* Apply some of the meta data (where applicable) */
-                    if ( is_array($meta) ) {
-                        if ( array_key_exists('profile', $meta) && count($meta['profile']) > 0 ) { $data['profile'] = $meta['profile']; }
-                    }
-                    if ( is_array($data['profile']) === false ) { unset($data['profile']); }
                 }
 
                 /* Is the cache key different from the "Proper Key"? */
@@ -494,46 +438,24 @@ class Account {
 
     /**
      *  Function returns a Meta object for an Account or an unhappy boolean
+     *
+     *  Note: caching is not used here because it's part of the Account object
      */
-    private function _getAccountMeta( $account_id, $version ) {
+    private function _getAccountMeta( $account_id ) {
         if ( nullInt($account_id) <= 0 ) { return false; }
-        if ( nullInt($version) <= 0 ) { $version = 0; }
 
-        /* Determine the Correct Cache Key (if the version is zero, check to see if we've already done a lookup in this HTTP request) */
-        $CacheKey = 'account-meta-' . substr('00000000' . $account_id, -8) . '-' . $version;
-        if ( $version <= 0 ) {
-            $propKey = getGlobalObject('prop-' . $CacheKey);
-            if ( is_bool($propKey) === false && NoNull($propKey) != '' ) { $CacheKey = $propKey; }
+        /* Collect the data */
+        $ReplStr = array( '[ACCOUNT_ID]' => nullInt($account_id) );
+        $sqlStr = readResource(SQL_DIR . '/account/getAccountMeta.sql', $ReplStr);
+        $rslt = doSQLQuery($sqlStr);
+        if ( is_array($rslt) ) {
+            $data = buildMetaArray($rslt);
+
+            /* If the data looks valid, let's return it */
+            if ( is_array($data) && count($data) > 0  ) { return $data; }
         }
 
-        /* Do we already have data for this Section? */
-        $data = getCacheObject($CacheKey);
-
-        /* If we do not have this record in the cache, query it from the database */
-        if ( is_array($data) === false ) {
-            $ReplStr = array( '[ACCOUNT_ID]' => nullInt($account_id) );
-            $sqlStr = readResource(SQL_DIR . '/account/getAccountMeta.sql', $ReplStr);
-            $rslt = doSQLQuery($sqlStr);
-            if ( is_array($rslt) ) {
-                $data = buildMetaArray($rslt);
-
-                /* Cache the Data (if it's valid) */
-                if ( is_array($data) && count($data) > 0 ) {
-                    $propKey = '';
-                    foreach ( $rslt as $Row ) {
-                        $propKey = 'account-meta-' . substr('00000000' . nullInt($Row['account_id']), -8) . '-' . nullInt($Row['version']);
-                    }
-
-                    /* Is the cache key different from the "Proper Key"? */
-                    if ( $CacheKey != $propKey ) { setGlobalObject('prop-' . $CacheKey, $propKey); }
-
-                    setCacheObject($CacheKey, $data);
-                }
-            }
-        }
-
-        /* If we have something that appears valid, return it. Otherwise, unhappy boolean. */
-        if ( is_array($data) && count($data) > 0  ) { return $data; }
+        /* If we're here, there's nothing */
         return false;
     }
 

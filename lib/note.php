@@ -146,12 +146,19 @@ class Note {
             if ( mb_strlen($CleanText) <= 0 && array_key_exists($Key, $this->settings) ) { $CleanText = NoNull($this->settings[$Key]); }
         }
 
+        $CleanParent = NoNull($this->settings['parent_guid'], $this->settings['parent']);
+        $CleanTitle = NoNull($this->settings['note_title'], $this->settings['title']);
         $CleanGuid = NoNull($this->settings['note_guid'], $this->settings['guid']);
         $CleanType = NoNull($this->settings['note_type'], $this->settings['type']);
 
         $CleanDate = NoNull($this->settings['note_date'], $this->settings['date']);
         if ( mb_strlen($CleanDate) > 10 ) { if ( validateDate($CleanDate, 'Y-m-d H:i:s') !== true ) { $CleanDate = ''; } }
         if ( mb_strlen($CleanDate) == 10 ) { if ( validateDate($CleanDate) !== true ) { $CleanDate = ''; } }
+
+        /* Is there a sort order? */
+        $sort = nullInt($this->settings['sort_order'], $this->settings['order']);
+        if ( $sort > 9999 ) { $sort = 9999; }
+        if ( $sort < 0 ) { $sort = 0; }
 
         /* Do we have tags to parse? */
         $CleanTags = '';
@@ -175,11 +182,19 @@ class Note {
         $mdown = NoNull($this->settings['as_markdown'], $this->settings['markdown']);
 
         /* Build the output array */
-        return array( 'text' => NoNull($CleanText),
-                      'guid' => ((mb_strlen($CleanGuid) == 36) ? $CleanGuid : ''),
-                      'type' => ((mb_strlen($CleanType) > 0) ? $CleanType : ''),
-                      'date' => ((mb_strlen($CleanDate) >= 10) ? $CleanDate : ''),
-                      'tags' => NoNull($CleanTags),
+        return array( 'title'   => ((mb_strlen($CleanTitle) > 0) ? $CleanTitle : ''),
+                      'content' => NoNull($CleanText),
+
+                      'parent'  => ((mb_strlen($CleanParent) == 36) ? $CleanParent : ''),
+                      'guid'    => ((mb_strlen($CleanGuid) == 36) ? $CleanGuid : ''),
+                      'type'    => ((mb_strlen($CleanType) > 0) ? $CleanType : 'general'),
+                      'date'    => ((mb_strlen($CleanDate) >= 10) ? $CleanDate : ''),
+
+                      'tags'    => NoNull($CleanTags),
+
+                      'sort_order' => nullInt($sort, 5000),
+                      'publish_at' => '',
+                      'expires_at' => '',
 
                       'markdown' => YNBool($mdown),
                      );
@@ -268,8 +283,49 @@ class Note {
      *  Function creates or updates a Note record and returns an updated Note object
      */
     private function _setNoteData() {
+        $inputs = $this->_getInputValues();
+
+        /* Ensure we have the bare minimum */
+        if ( mb_strlen(NoNull($inputs['title']) . NoNull($inputs['content'])) <= 0 ) {
+            return $this->_setMetaMessage("A title or some content is required for a Note", 400);
+        }
+
+        /* Construct the SQL statement and execute */
+        $ReplStr = array( '[ACCOUNT_ID]'  => nullInt($this->settings['_account_id']),
+                          '[TITLE]'       => sqlScrub($inputs['title']),
+                          '[CONTENT]'     => sqlScrub($inputs['content']),
+                          '[TYPE]'        => sqlScrub($inputs['type']),
+                          '[TAG_LIST]'    => sqlScrub($inputs['tags']),
+
+                          '[NOTE_GUID]'   => sqlScrub($inputs['guid']),
+                          '[PARENT_GUID]' => sqlScrub($inputs['parent']),
+
+                          '[PUBLISH_AT]'  => sqlScrub($inputs['publish_at']),
+                          '[EXPIRES_AT]'  => sqlScrub($inputs['expires_at']),
+                          '[SORT_ORDER]'  => nullInt($inputs['sort_order']),
+                         );
+        $sqlStr = readResource(SQL_DIR . '/note/setNoteData.sql', $ReplStr);
+        $rslt = doSQLQuery($sqlStr);
+        if ( is_array($rslt) ) {
+            foreach ( $rslt as $Row ) {
+                $note_id = nullInt($Row['note_id']);
+
+                /* So long as we have a Note.id, let's continue */
+                if ( $note_id > 0 ) {
+                    /* Save any meta data we might have */
+                    $meta = false;
 
 
+                    $mOK = $this->_setMetaRecord($note_id, $meta);
+
+                    /* Return a completed Note object */
+                    $data = $this->_getNoteById($note_id, $Row['version']);
+                }
+            }
+        }
+
+        /* If we're here, the data could not be saved */
+        return $this->_setMetaMessage("Could not save Note data", 400);
     }
 
     /**
@@ -278,7 +334,7 @@ class Note {
      *  Note: Meta keys that are not included in the $meta object WILL NOT be removed from the database
      */
     private function _setMetaRecords( $note_id, $meta ) {
-        if ( is_array($meta) === false )
+        if ( is_array($meta) === false ) { return false; }
         $note_id = nullInt($note_id);
         $version = 0;
 
@@ -314,7 +370,6 @@ class Note {
         if ( $version > 0 ) { return $version; }
 
         /* If we're here, something failed */
-        $this->_setMetaMessage("Could not save Note Meta record", 400);
         return false;
     }
 
@@ -325,6 +380,13 @@ class Note {
      *  Function marks a Note record as deleted and returns a basic confirmation array
      */
     private function _deleteNote() {
+
+    }
+
+    /**
+     *  Function marks a Meta key on a Note as deleted
+     */
+    private function _deleteNoteMeta() {
 
     }
 

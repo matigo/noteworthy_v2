@@ -678,21 +678,67 @@ CREATE OR REPLACE RULE rule_tokens_before_delete AS
        UPDATE "Tokens" SET "is_deleted" = true WHERE "Tokens"."id" = OLD."id";
 
 /** ************************************************************************* *
+ *  Create Sequence (Tags)
+ ** ************************************************************************* */
+DROP TABLE IF EXISTS "Tag";
+CREATE TABLE IF NOT EXISTS "Tag" (
+    "id"            serial                          ,
+    "account_id"    integer             NOT NULL    ,
+
+    "key"           varchar(256)        NOT NULL    ,
+    "name"          varchar(256)        NOT NULL    ,
+    "summary"       varchar(2048)           NULL    ,
+
+    "guid"          char(36)     UNIQUE NOT NULL    ,
+
+    "is_deleted"    boolean             NOT NULL    DEFAULT false,
+    "created_at"    timestamp           NOT NULL    DEFAULT CURRENT_TIMESTAMP,
+    "updated_at"    timestamp           NOT NULL    DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY ("id"),
+    FOREIGN KEY ("account_id") REFERENCES "Account" ("id")
+);
+CREATE INDEX idx_tag_acct ON "Tag" ("account_id");
+CREATE INDEX idx_tag_guid ON "Tag" ("guid");
+
+/* Before INSERT */
+DROP TRIGGER IF EXISTS trg_tag_before_insert ON "Tag";
+CREATE TRIGGER trg_tag_before_insert
+  BEFORE INSERT ON "Tag"
+    FOR EACH ROW
+  EXECUTE PROCEDURE guid_before_insert();
+
+/* Before UPDATE */
+DROP TRIGGER IF EXISTS trg_tag_before_update ON "Tag";
+CREATE TRIGGER trg_tag_before_update
+  BEFORE UPDATE ON "Tag"
+    FOR EACH ROW
+  EXECUTE PROCEDURE guid_before_update();
+
+/* Before DELETE */
+DROP RULE IF EXISTS rule_tag_before_delete ON "Tag";
+CREATE OR REPLACE RULE rule_tag_before_delete AS
+    ON DELETE TO "Tag"
+    DO INSTEAD
+       UPDATE "Tag" SET "is_deleted" = true WHERE "Tag"."id" = OLD."id";
+
+/** ************************************************************************* *
  *  Create Sequence (Note)
  ** ************************************************************************* */
 DROP TABLE IF EXISTS "Note";
 CREATE TABLE IF NOT EXISTS "Note" (
     "id"            serial                          ,
     "account_id"    integer             NOT NULL    ,
-
-    "thread_id"     integer                 NULL    ,
-    "parent_id"     integer                 NULL    ,
+    "type"          varchar(64)         NOT NULL    ,
 
     "title"         varchar(1024)           NULL    ,
     "content"       text                NOT NULL    ,
 
     "guid"          char(36)     UNIQUE NOT NULL    ,
     "hash"          char(128)           NOT NULL    ,
+
+    "sort_order"    integer             NOT NULL    DEFAULT 5000    CHECK ("sort_order" BETWEEN 0 AND 9999),
+    "thread_id"     integer                 NULL    ,
+    "parent_id"     integer                 NULL    ,
 
     "is_deleted"    boolean             NOT NULL    DEFAULT false,
     "created_at"    timestamp           NOT NULL    DEFAULT CURRENT_TIMESTAMP,
@@ -705,7 +751,8 @@ CREATE TABLE IF NOT EXISTS "Note" (
     FOREIGN KEY ("updated_by") REFERENCES "Account" ("id")
 );
 CREATE INDEX idx_note_main ON "Note" ("account_id");
-CREATE INDEX idx_note_link ON "Note" ("thread_id");
+CREATE INDEX idx_note_thrd ON "Note" ("thread_id");
+CREATE INDEX idx_note_link ON "Note" ("parent_id");
 CREATE INDEX idx_note_guid ON "Note" ("guid");
 
 /* Before INSERT */
@@ -715,7 +762,8 @@ CREATE OR REPLACE FUNCTION note_before_insert()
   AS
 $$
 BEGIN
-    NEW."hash" = encode(sha512(CAST(CONCAT(COALESCE(NEW."title", '{title}'), REPLACE(NEW."content", '\', '\\'),
+    NEW."hash" = encode(sha512(CAST(CONCAT(COALESCE(NEW."title", '{title}'), REPLACE(NEW."content", '\', '\\'), COALESCE(NEW."type", '{type}'),
+                                           RIGHT(CONCAT('00000000', COALESCE(NEW."sort_order", 0)), 8),
                                            RIGHT(CONCAT('00000000', COALESCE(NEW."account_id", 0)), 8),
                                            RIGHT(CONCAT('00000000', COALESCE(NEW."thread_id", 0)), 8),
                                            RIGHT(CONCAT('00000000', COALESCE(NEW."parent_id", 0)), 8),
@@ -748,7 +796,8 @@ BEGIN
         NEW."guid" = OLD."guid";
     END IF;
 
-    NEW."hash" = encode(sha512(CAST(CONCAT(COALESCE(NEW."title", '{title}'), REPLACE(NEW."content", '\', '\\'),
+    NEW."hash" = encode(sha512(CAST(CONCAT(COALESCE(NEW."title", '{title}'), REPLACE(NEW."content", '\', '\\'), COALESCE(NEW."type", '{type}'),
+                                           RIGHT(CONCAT('00000000', COALESCE(NEW."sort_order", 0)), 8),
                                            RIGHT(CONCAT('00000000', COALESCE(NEW."account_id", 0)), 8),
                                            RIGHT(CONCAT('00000000', COALESCE(NEW."thread_id", 0)), 8),
                                            RIGHT(CONCAT('00000000', COALESCE(NEW."parent_id", 0)), 8),
@@ -756,8 +805,10 @@ BEGIN
                                            , 'hex');
 
     IF NEW."hash" <> OLD."hash" THEN
-        INSERT INTO "NoteHistory" ("note_id", "thread_id", "parent_id", "title", "content", "hash", "updated_at", "updated_by")
-        SELECT OLD."id" as "note_id", OLD."thread_id", OLD."parent_id", OLD."title", OLD."content", OLD."hash", OLD."updated_at", OLD."updated_by";
+        INSERT INTO "NoteHistory" ("note_id", "type", "title", "content", "hash", "sort_order",
+                                   "thread_id", "parent_id", "updated_at", "updated_by")
+        SELECT OLD."id" as "note_id", OLD."type", OLD."title", OLD."content", OLD."hash", OLD."sort_order",
+               OLD."thread_id", OLD."parent_id", OLD."updated_at", OLD."updated_by";
     END IF;
 
     NEW."updated_at" = CURRENT_TIMESTAMP;
@@ -794,7 +845,7 @@ CREATE TABLE IF NOT EXISTS "NoteMeta" (
     PRIMARY KEY ("note_id", "key"),
     FOREIGN KEY ("note_id") REFERENCES "Note" ("id")
 );
-CREATE INDEX idx_nmeta_site ON "NoteMeta" ("note_id");
+CREATE INDEX idx_nmeta_main ON "NoteMeta" ("note_id");
 
 /* Before INSERT */
 DROP TRIGGER IF EXISTS trg_notemeta_before_insert ON "NoteMeta";
@@ -817,19 +868,51 @@ CREATE OR REPLACE RULE rule_notemeta_before_delete AS
     DO INSTEAD
        UPDATE "NoteMeta" SET "is_deleted" = true WHERE "NoteMeta"."note_id" = OLD."note_id" and "NoteMeta"."key" = OLD."key";
 
+DROP TABLE IF EXISTS "NoteTag";
+CREATE TABLE IF NOT EXISTS "NoteTag" (
+    "note_id"       integer             NOT NULL    ,
+    "tag_id"        integer             NOT NULL    ,
+
+    "is_deleted"    boolean             NOT NULL    DEFAULT false,
+    "created_at"    timestamp           NOT NULL    DEFAULT CURRENT_TIMESTAMP,
+    "updated_at"    timestamp           NOT NULL    DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY ("note_id", "tag_id"),
+    FOREIGN KEY ("note_id") REFERENCES "Note" ("id"),
+    FOREIGN KEY ("tag_id") REFERENCES "Tag" ("id")
+);
+CREATE INDEX idx_ntag_main ON "NoteTag" ("note_id");
+
+/* Before UPDATE */
+DROP TRIGGER IF EXISTS trg_notetag_before_update ON "NoteTag";
+CREATE TRIGGER trg_notetag_before_update
+  BEFORE UPDATE ON "NoteTag"
+    FOR EACH ROW
+  EXECUTE PROCEDURE date_before_update();
+
+/* Before DELETE */
+DROP RULE IF EXISTS rule_notetag_before_delete ON "NoteTag";
+CREATE OR REPLACE RULE rule_notetag_before_delete AS
+    ON DELETE TO "NoteTag"
+    DO INSTEAD
+       UPDATE "NoteTag" SET "is_deleted" = true WHERE "NoteTag"."note_id" = OLD."note_id" and "NoteTag"."tag_id" = OLD."tag_id";
+
+/** ************************************************************************* *
+ *  Create Sequence (History)
+ ** ************************************************************************* */
 DROP TABLE IF EXISTS "NoteHistory";
 CREATE TABLE IF NOT EXISTS "NoteHistory" (
     "id"            serial                          ,
     "note_id"       integer             NOT NULL    ,
-
-    "thread_id"     integer                 NULL    ,
-    "parent_id"     integer                 NULL    ,
+    "type"          varchar(64)         NOT NULL    ,
 
     "title"         varchar(1024)           NULL    ,
     "content"       text                NOT NULL    ,
 
-    "guid"          char(36)     UNIQUE NOT NULL    ,
     "hash"          char(128)           NOT NULL    ,
+
+    "sort_order"    integer             NOT NULL    DEFAULT 5000    CHECK ("sort_order" BETWEEN 0 AND 9999),
+    "thread_id"     integer                 NULL    ,
+    "parent_id"     integer                 NULL    ,
 
     "is_deleted"    boolean             NOT NULL    ,
     "updated_at"    timestamp           NOT NULL    ,

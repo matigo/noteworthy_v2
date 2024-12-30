@@ -98,8 +98,6 @@ function watchLoginForm() {
 function prepScreen() {
     var _token = getMetaValue('authorization');
 
-    console.log("Token: " + _token);
-
     /* Check the Auth Token (if exists) */
     if ( _token.length >= 30 ) {
         /* Validate the Access Token */

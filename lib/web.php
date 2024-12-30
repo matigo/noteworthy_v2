@@ -38,6 +38,7 @@ class Route extends Midori {
         $PropUrl = ((YNBool(SITE_HTTPS)) ? 'https' : 'http') . '://' . strtolower($_SERVER['SERVER_NAME']);
         $RedirectURL = NoNull($_SERVER['HTTP_REFERER'], $PropUrl);
         $PgRoot = strtolower(NoNull($this->settings['PgRoot']));
+        $Excludes = array('login');
         $ReplStr = array();
 
         $html = readResource(FLATS_DIR . '/templates/500.html', $ReplStr);
@@ -73,9 +74,12 @@ class Route extends Midori {
         switch ( $PgRoot ) {
             case 'validatetoken':
             case 'validate':
-                if ( mb_strlen(NoNull($this->settings['token'])) > 20 ) {
-                    redirectTo( $RedirectURL, $this->settings );
-                }
+                if ( mb_strlen(NoNull($this->settings['token'])) > 30 ) { redirectTo( $RedirectURL, $this->settings ); }
+                break;
+
+            case 'validated':
+            case 'login':
+                if ( mb_strlen(NoNull($this->settings['token'])) > 30 ) { redirectTo( $PropUrl, $this->settings ); }
                 break;
 
             case 'signout':

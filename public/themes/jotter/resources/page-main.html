@@ -1,11 +1,33 @@
-            <section class="content">
-                <section class="content-main section-list">
-                    <p>Section List</p>
-                </section>
-                <section class="content-main note-list">
-                    <p>Note List</p>
-                </section>
-                <section class="content-main note-item">
-                    <p>This is where the note sits</p>
-                </section>
+        <section class="content">
+            <section class="content-main section-list">
+                <h4>Library</h4>
+                <ul>
+                    <li draggable="true"><i class="fas fa-book"></i><span>Everything</span></li>
+                    <li draggable="true"><i class="fas fa-clock"></i><span>Past Week</span></li>
+                    <li draggable="true"><i class="far fa-file-lines"></i><span>Notes</span></li>
+                    <li draggable="true"><i class="fas fa-photo-film"></i><span>Media</span></li>
+                    <li draggable="true"><i class="fas fa-trash"></i><span>Deleted</span></li>
+                </ul>
+                <h4>Collections</h4>
+                <h4>Tags</h4>
             </section>
+            <section class="content-main note-list">
+                <p>Note List</p>
+            </section>
+            <section class="content-main note-item">
+                <p>This is where the note sits</p>
+            </section>
+        </section>
+        <script type="text/javascript" src="[SHARED_JS]/globals.js?ver=[CSS_VER]"></script>
+        <script type="text/javascript" src="[SHARED_JS]/network.js?ver=[CSS_VER]"></script>
+        <script type="text/javascript" src="[SHARED_JS]/common.js?ver=[CSS_VER]"></script>
+        <script type="text/javascript" src="[JS_DIR]/main.js?ver=[CSS_VER]"></script>
+        <script type="text/javascript">
+            window.strings = { 'lang.culture': "[lang_culture]",
+                               'status.active': "[lblTaskActive]",
+                               'status.locked': "[lblTaskLocked]",
+                               'msg.no-reviews': "[msgRapZeroRecords]",
+                               'msg.collect-data': "[msgReviewCollectingPeriod]",
+                               'msg.invalid-range': "[msgReviewInvalidRange]"
+                              };
+        </script>

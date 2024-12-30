@@ -689,6 +689,8 @@ CREATE TABLE IF NOT EXISTS "Tag" (
     "name"          varchar(256)        NOT NULL    ,
     "summary"       varchar(2048)           NULL    ,
 
+    "is_visible"    boolean             NOT NULL    DEFAULT true,
+
     "guid"          char(36)     UNIQUE NOT NULL    ,
 
     "is_deleted"    boolean             NOT NULL    DEFAULT false,

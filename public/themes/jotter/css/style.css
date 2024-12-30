@@ -446,8 +446,10 @@ nav.topbar {
     align-content: center;
     align-items: center;
     border-bottom: 2px solid var(--pin-black, #000);
+    cursor: default;
     display: flex;
     justify-content: space-between;
+    user-select: none;
     vertical-align: text-top;
     width: 100%;
     padding: 10px 0;
@@ -504,19 +506,18 @@ footer {
 section.content {
     align-content: center;
     align-items: center;
+    cursor: default;
     display: flex;
     vertical-align: text-top;
     white-space-collapsing: discard;
-    width: 100%;
+    width: 100vw;
     padding: 0;
     margin: 0 auto;
 }
 section.content-main {
     background-color: rgba(100,100,100,0.4);
     border-right: 2px solid var(--pin-black, #000);
-    display: inline-flex;
-    flex-grow: 1;
-    flex-shrink: 1;
+    display: inline-block;
     overflow: auto;
     vertical-align: text-top;
     white-space-collapsing: discard;
@@ -528,4 +529,57 @@ section.content-main {
 section.content-main:last-child {
     border: none !important;
     max-width: none;
+}
+
+section .section-list {
+    user-select: none;
+    min-width: 200px;
+}
+section .section-list h4 {
+    cursor: default;
+    display: block;
+    white-space-collapsing: discard;
+    width: calc(100% - 1.5em);
+    padding: 0 0.5em;
+    margin: 0.5em 0 0.25em;
+}
+section .section-list ol,
+section .section-list ul {
+    display: block;
+    list-style: none;
+    list-style-image: none;
+    list-style-type: none;
+    padding: 0 0 0 1em;
+    margin: 0;
+    width: calc(100% - 1.5em);
+}
+section .section-list li {
+    cursor: pointer;
+    display: block;
+    padding: 0.25em 0;
+    margin: 0;
+}
+section .section-list i {
+    text-align: center;
+    padding: 0 0.25em 0 0;
+    min-width: 1.5em;
+}
+section .section-list li span {
+    cursor: pointer;
+}
+
+
+
+
+section .note-list {
+    width: 300px;
+}
+
+
+
+
+section .note-item {
+    display: inline-flex;
+    flex-grow: 1;
+    flex-shrink: 1;
 }

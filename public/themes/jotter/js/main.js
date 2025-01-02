@@ -91,6 +91,8 @@ function parseLibrary(data) {
                                      });
                 _obj.appendChild(buildElement({ 'tag': 'i', 'classes': _libs[i].icons }));
                 _obj.appendChild(buildElement({ 'tag': 'span', 'text': _libs[i].label }));
+                _obj.addEventListener('touchend', function(e) { handleSidebarItem(e); });
+                _obj.addEventListener('click', function(e) { handleSidebarItem(e); });
 
             /* Add the Item to the List */
             _lib.appendChild(_obj);
@@ -109,6 +111,29 @@ function parseLibrary(data) {
     }
 }
 
+/** ************************************************************************* *
+ *  Sidebar Functions
+ ** ************************************************************************* */
+function handleSidebarItem(el) {
+    if ( el === undefined || el === null || el === false ) { return; }
+    if ( el.currentTarget !== undefined && el.currentTarget !== null ) { el = el.currentTarget; }
+    if ( el.tagName === undefined || el.tagName === null || NoNull(el.tagName).length <= 0 ) { return; }
+    for ( let e = 0; e <= 9; e++ ) {
+        if ( NoNull(el.tagName).toLowerCase() != 'li' ) {
+            el = el.parentElement;
+        } else {
+            e += 10;
+        }
+    }
+
+    /* Do the action */
+    if ( NoNull(el.tagName).toLowerCase() == 'li' ) {
+        if ( splitSecondCheck(el) ) {
+            var _key = NoNull(el.getAttribute('data-key')).toLowerCase();
+            console.log(_key);
+        }
+    }
+}
 
 /** ************************************************************************* *
  *  Drag and Drop Functions

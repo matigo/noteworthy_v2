@@ -70,6 +70,8 @@ function parseLibrary(data) {
                      {'icons': ['fas', 'fa-clock'], 'key': 'recent', 'label': NoNull(window.strings['lib.recent'], 'Past Week') },
                      {'icons': ['fas', 'fa-file-lines'], 'key': 'notes', 'label': NoNull(window.strings['lib.notes'], 'Notes') },
                      {'icons': ['fas', 'fa-photo-film'], 'key': 'media', 'label': NoNull(window.strings['lib.media'], 'Media') },
+                     {'icons': ['fas', 'fa-map-location-dot'], 'key': 'location', 'label': NoNull(window.strings['lib.location'], 'Locations') },
+                     {'icons': ['fas', 'fa-map-pin'], 'key': 'pins', 'label': NoNull(window.strings['lib.pins'], 'Pinned') },
                      {'icons': ['fas', 'fa-trash'], 'key': 'deleted', 'label': NoNull(window.strings['lib.deleted'], 'Deleted') },
                     ];
         els[e].innerHTML = '';
@@ -103,6 +105,7 @@ function parseLibrary(data) {
 
         /* Build the Tags */
         els[e].appendChild(buildElement({ 'tag': 'h4', 'text': NoNull(window.strings['lbl.tags'], 'Tags') }));
+
     }
 }
 
